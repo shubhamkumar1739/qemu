@@ -63,6 +63,7 @@ struct KVMState
 
     int nr_slots;
     int fd;
+    int dtrkfd;
     int vmfd;
     int coalesced_mmio;
     int coalesced_pio;

@@ -49,6 +49,7 @@
 
 #include "hw/boards.h"
 #include "monitor/stats.h"
+#include "dirty_track.h"
 
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
@@ -608,8 +609,14 @@ static bool kvm_slot_get_dirty_log(KVMState *s, KVMSlot *slot)
 
     d.dirty_bitmap = slot->dirty_bmap;
     d.slot = slot->slot | (slot->as_id << 16);
-    ret = kvm_vm_ioctl(s, KVM_GET_DIRTY_LOG, &d);
 
+    query_arg_t q = {};
+    q.pid = getpid();
+    q.log = &d;
+
+    // ret = kvm_vm_ioctl(s, KVM_GET_DIRTY_LOG, &d);
+    ret = ioctl(s->dtrkfd, IOCTL_GET_DIRTY_BITMAP, &q);
+    // TODO: add your own ioctl call
     if (ret == -ENOENT) {
         /* kernel does not have dirty bitmap in this slot */
         ret = 0;
@@ -2316,6 +2323,7 @@ static int kvm_init(MachineState *ms)
 #endif
     QLIST_INIT(&s->kvm_parked_vcpus);
     s->fd = qemu_open_old("/dev/kvm", O_RDWR);
+    s->dtrkfd = open("/dev/dirty_track", O_RDWR);
     if (s->fd == -1) {
         fprintf(stderr, "Could not access KVM kernel module: %m\n");
         ret = -errno;
@@ -2615,6 +2623,9 @@ err:
     assert(ret < 0);
     if (s->vmfd >= 0) {
         close(s->vmfd);
+    }
+    if(s->dtrkfd >= 0) {
+        close(s->dtrkfd);
     }
     if (s->fd != -1) {
         close(s->fd);
@@ -3613,6 +3624,7 @@ static void kvm_accel_instance_init(Object *obj)
 
     s->fd = -1;
     s->vmfd = -1;
+    s->dtrkfd = -1;
     s->kvm_shadow_mem = -1;
     s->kernel_irqchip_allowed = true;
     s->kernel_irqchip_split = ON_OFF_AUTO_AUTO;
